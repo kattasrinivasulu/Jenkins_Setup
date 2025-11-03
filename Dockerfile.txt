@@ -1,0 +1,5 @@
+FROM openjdk:17-alpine
+COPY HelloJenkins.java /app/HelloJenkins.java
+WORKDIR /app
+RUN JAVAC HelloJenkins.java
+CMD ["java", "HelloJenkins.java"]
