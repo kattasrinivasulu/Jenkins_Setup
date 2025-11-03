@@ -1,1 +1,59 @@
+pipeline {
+    agent any
+    environment {
+        QUAY_REPO = "quay.io/your_quay_username/jenkins-app" // << REPLACE WITH YOUR REPO
+        IMAGE_TAG = "${env.BUILD_ID}"                       
+        KUBECONFIG_FILE = "$WORKSPACE/.kubeconfig"          
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+        stage('Build Image Locally (with Podman)') {
+            steps {
+                script {
+                    sh "podman build -t ${QUAY_REPO}:${IMAGE_TAG} ."
+                    sh "podman tag ${QUAY_REPO}:${IMAGE_TAG} ${QUAY_REPO}:latest"
+                }
+            }
+        }
+        stage('Push to Quay.io') {
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'quay-credentials', passwordVariable: 'QUAY_TOKEN', usernameVariable: 'QUAY_USER')]) {
+                        sh "podman login quay.io -u ${QUAY_USER} -p ${QUAY_TOKEN}"
+                        sh "podman push ${QUAY_REPO}:${IMAGE_TAG}"
+                        sh "podman push ${QUAY_REPO}:latest"
+                        sh "podman logout quay.io"
+                    }
+                }
+            }
+        }
+        stage('Load Image into Kind Cluster') {
+            steps {
+                script {
+                    sh "kind load docker-image ${QUAY_REPO}:${IMAGE_TAG} --name local-jenkins-cluster"
+                }
+            }
+        }
+        stage('Deploy to Kind Cluster') {
+            steps {
+                script {
+                    sh "kind get kubeconfig --name local-jenkins-cluster > ${KUBECONFIG_FILE}"
+                    sh "sed -i 's|REPLACE_IMAGE_TAG|${QUAY_REPO}:${IMAGE_TAG}|g' deployment.yaml"
+                    sh "kubectl --kubeconfig ${KUBECONFIG_FILE} apply -f deployment.yaml"
+                    sh "kubectl --kubeconfig ${KUBECONFIG_FILE} apply -f service.yaml"
+                }
+            }
+        }
+        stage('Verification') {
+            steps {
+                sh "kubectl --kubeconfig ${KUBECONFIG_FILE} get pods -l app=jenkins-app"
+                echo "Deployment complete. Check http://localhost:30000 on your local machine."
+            }
+        }
+    }
+}
 
