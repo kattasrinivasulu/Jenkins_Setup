@@ -1,4 +1,4 @@
-pipeline {
+//pipeline {
     agent any
     environment {
         QUAY_REPO = "quay.io/your_quay_username/jenkins-app" // << REPLACE WITH YOUR REPO
@@ -56,4 +56,5 @@ pipeline {
         }
     }
 }
+
 
